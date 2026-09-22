@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import pandas as pd
 
-from src.what_hyperparamter import (
+from src.what_hyperparameters import (
     find_best_hyperparameters,
     fit_engine,
     load_books,

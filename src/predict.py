@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 from tokenizers import Tokenizer
 
-from src.what_hyperparamter import NgramEngine
+from src.what_hyperparameters import NgramEngine
 
 
 def load_final_engine(output_directory: str | Path = "outputs") -> NgramEngine:

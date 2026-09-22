@@ -34,7 +34,7 @@ random seed `42`. This evaluates 32 configurations.
 
 ```mermaid
 flowchart TD
-    Config["Book paths, chapter counts, candidate settings"] --> Search["what_hyperparamter.find_best_hyperparameters"]
+    Config["Book paths, chapter counts, candidate settings"] --> Search["what_hyperparameters.find_best_hyperparameters"]
     Search --> Split["make_validation_split"]
     Split --> Clean["prep.no_gutenberg: raw book → text without Gutenberg wrapper"]
     Clean --> Select["prep.randomize_chapters: chapter count + validation count → chapter numbers"]
@@ -91,7 +91,7 @@ Entry point: `python pipeline.py`.
 flowchart TD
     CSV["outputs/hyperparameter_results.csv"] --> Best["load_best_hyperparameters: CSV → settings from minimum validation_perplexity row"]
     Best --> Full["run_full_training: settings → final NgramEngine"]
-    Books["BOOK_FILES: author → book path and chapter count"] --> Read["what_hyperparamter.load_books + prep.no_gutenberg → full texts keyed by author"]
+    Books["BOOK_FILES: author → book path and chapter count"] --> Read["what_hyperparameters.load_books + prep.no_gutenberg → full texts keyed by author"]
     Read --> Full
     Full --> Fit["fit_engine: full texts + selected settings"]
     Fit --> Engine["Final NgramEngine"]
@@ -183,15 +183,15 @@ from those books, change final training to exclude those chapters as well.
 | `src/tokenize.py` | `build_tokenizer` | List of training strings, vocabulary size | Trained shared BPE tokenizer |
 | `src/make_ngram.py` | `make_ngram_counts` | Token-ID sequences, `n`, `k` | Count DataFrame used by the engine |
 | `src/make_ngram.py` | `grams` | Token-ID sequences, tokenizer, `n` | Decoded n-gram/count DataFrame for inspection; not used by engine fitting |
-| `src/what_hyperparamter.py` | `load_books` | Author-keyed paths and chapter counts | Cleaned full texts keyed by author |
-| `src/what_hyperparamter.py` | `make_validation_split` | Book configuration, validation fraction, seed | `(training_texts, validation_texts)` keyed by author |
-| `src/what_hyperparamter.py` | `prepare_author_model` | Author text, shared tokenizer, `n`, `k` | One author's n-gram count table |
-| `src/what_hyperparamter.py` | `fit_engine` | Training texts, vocabulary size, `n`, `k` | Shared tokenizer and separate author models in `NgramEngine` |
-| `src/what_hyperparamter.py` | `NgramEngine` | Tokenizer, `n`, `k`, author tables | Count lookups and scoring/prediction methods |
-| `src/what_hyperparamter.py` | `validation_perplexity` | Engine, validation texts | Combined correct-author validation perplexity |
-| `src/what_hyperparamter.py` | `validation_perplexities` | Engine, validation texts | Correct-author validation perplexity per author |
-| `src/what_hyperparamter.py` | `plot_hyperparameter_heatmaps` | Search results DataFrame | Matplotlib figure |
-| `src/what_hyperparamter.py` | `find_best_hyperparameters` | Book configuration, candidate settings, split settings | Best settings, sorted results DataFrame, heatmap figure |
+| `src/what_hyperparameters.py` | `load_books` | Author-keyed paths and chapter counts | Cleaned full texts keyed by author |
+| `src/what_hyperparameters.py` | `make_validation_split` | Book configuration, validation fraction, seed | `(training_texts, validation_texts)` keyed by author |
+| `src/what_hyperparameters.py` | `prepare_author_model` | Author text, shared tokenizer, `n`, `k` | One author's n-gram count table |
+| `src/what_hyperparameters.py` | `fit_engine` | Training texts, vocabulary size, `n`, `k` | Shared tokenizer and separate author models in `NgramEngine` |
+| `src/what_hyperparameters.py` | `NgramEngine` | Tokenizer, `n`, `k`, author tables | Count lookups and scoring/prediction methods |
+| `src/what_hyperparameters.py` | `validation_perplexity` | Engine, validation texts | Combined correct-author validation perplexity |
+| `src/what_hyperparameters.py` | `validation_perplexities` | Engine, validation texts | Correct-author validation perplexity per author |
+| `src/what_hyperparameters.py` | `plot_hyperparameter_heatmaps` | Search results DataFrame | Matplotlib figure |
+| `src/what_hyperparameters.py` | `find_best_hyperparameters` | Book configuration, candidate settings, split settings | Best settings, sorted results DataFrame, heatmap figure |
 | `src/predict.py` | `load_final_engine` | Output directory, default `outputs` | Restored `NgramEngine` |
 | `src/predict.py` | `predict_text` | Text string, engine | Predicted author and both perplexities |
 | `src/predict.py` | `predict_file` | UTF-8 file path, engine | Same result as `predict_text` |
