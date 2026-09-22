@@ -1,7 +1,7 @@
 from collections import Counter
 from dataclasses import dataclass
 from itertools import product
-from math import log
+from math import exp, log
 from pathlib import Path
 
 import numpy as np
@@ -83,11 +83,12 @@ class NgramEngine:
             self.context_counts[author] = contexts
 
     def score(self, text: str, author: str) -> float:
-        """Return the average log probability of text under one author model."""
+        """Return the average log probability per whitespace-delimited word."""
         token_ids = self.tokenizer.encode(text).ids
         vocab_size = self.tokenizer.get_vocab_size()
+        word_count = len(text.split())
 
-        if len(token_ids) < self.n:
+        if len(token_ids) < self.n or word_count == 0:
             return float("-inf")
 
         log_probability = 0.0
@@ -107,7 +108,11 @@ class NgramEngine:
             )
             log_probability += log(probability)
 
-        return log_probability / number_of_ngrams
+        return log_probability / word_count
+
+    def perplexity(self, text: str, author: str) -> float:
+        """Return exp of the average negative log probability per word."""
+        return exp(-self.score(text, author))
 
     def predict(self, text: str) -> str:
         """Return the author whose language model scores the text highest."""
@@ -130,14 +135,111 @@ def fit_engine(
     return NgramEngine(tokenizer, n, k, ngram_tables)
 
 
-def validation_accuracy(engine: NgramEngine, validation_texts: dict[str, str]) -> float:
-    correct_predictions = 0
+def validation_perplexity(engine: NgramEngine, validation_texts: dict[str, str]) -> float:
+    """Return corpus-level validation perplexity under the correct author models."""
+    total_log_probability = 0.0
+    total_word_count = 0
 
     for actual_author, text in validation_texts.items():
-        if engine.predict(text) == actual_author:
-            correct_predictions += 1
+        word_count = len(text.split())
+        average_log_probability = engine.score(text, actual_author)
 
-    return correct_predictions / len(validation_texts)
+        total_log_probability += average_log_probability * word_count
+        total_word_count += word_count
+
+    return exp(-total_log_probability / total_word_count)
+
+
+def validation_perplexities(
+    engine: NgramEngine,
+    validation_texts: dict[str, str],
+) -> dict[str, float]:
+    """Return each author model's perplexity on its own validation text."""
+    perplexities = {}
+
+    for author, text in validation_texts.items():
+        perplexities[author] = engine.perplexity(text, author)
+
+    return perplexities
+
+
+def plot_hyperparameter_heatmaps(results_df: pd.DataFrame):
+    """Return author-specific validation-perplexity heatmaps for every n."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    n_values = sorted(results_df["n"].unique())
+    model_columns = [
+        column
+        for column in results_df.columns
+        if column.endswith("_validation_perplexity")
+        and column != "validation_perplexity"
+    ]
+
+    figure, axes = plt.subplots(
+        len(n_values),
+        len(model_columns),
+        figsize=(5 * len(model_columns) + 1, 4 * len(n_values)),
+        squeeze=False,
+        layout="constrained",
+    )
+    images = []
+    minimum_perplexity = results_df[model_columns].min().min()
+    maximum_perplexity = results_df[model_columns].max().max()
+
+    if minimum_perplexity == maximum_perplexity:
+        maximum_perplexity += 1
+
+    for row, n in enumerate(n_values):
+        n_results = results_df[results_df["n"] == n]
+
+        for column, model_column in enumerate(model_columns):
+            axis = axes[row, column]
+            heatmap_data = n_results.pivot(
+                index="k",
+                columns="vocab_size",
+                values=model_column,
+            ).sort_index().sort_index(axis=1)
+
+            image = axis.imshow(
+                heatmap_data.to_numpy(),
+                vmin=minimum_perplexity,
+                vmax=maximum_perplexity,
+                cmap="viridis",
+                aspect="auto",
+            )
+            images.append(image)
+
+            author = model_column.removesuffix("_validation_perplexity").title()
+            axis.set_title(f"{author} model, n = {n}")
+            axis.set_xlabel("BPE vocabulary size")
+            axis.set_ylabel("Smoothing k")
+            axis.set_xticks(range(len(heatmap_data.columns)))
+            axis.set_xticklabels(heatmap_data.columns)
+            axis.set_yticks(range(len(heatmap_data.index)))
+            axis.set_yticklabels(heatmap_data.index)
+
+            for heatmap_row in range(len(heatmap_data.index)):
+                for heatmap_column in range(len(heatmap_data.columns)):
+                    perplexity = heatmap_data.iloc[heatmap_row, heatmap_column]
+                    axis.text(
+                        heatmap_column,
+                        heatmap_row,
+                        f"{perplexity:.2f}",
+                        ha="center",
+                        va="center",
+                        color="white",
+                    )
+
+    figure.colorbar(
+        images[0],
+        ax=axes.ravel().tolist(),
+        label="Validation perplexity (lower is better)",
+    )
+    figure.suptitle("Author-model validation perplexity")
+
+    return figure
 
 
 def find_best_hyperparameters(
@@ -147,7 +249,7 @@ def find_best_hyperparameters(
     k_values: list[float],
     validation_fraction: float = 0.2,
     random_seed: int = 42,
-) -> tuple[dict[str, int | float], pd.DataFrame]:
+) -> tuple[dict[str, int | float], pd.DataFrame, object]:
     """Tune BPE vocabulary size, n-gram order, and add-k smoothing on validation."""
     training_texts, validation_texts = make_validation_split(
         book_files,
@@ -158,18 +260,24 @@ def find_best_hyperparameters(
     results = []
     for vocab_size, n, k in product(vocab_sizes, n_values, k_values):
         engine = fit_engine(training_texts, vocab_size, n, k)
-        accuracy = validation_accuracy(engine, validation_texts)
+        perplexity = validation_perplexity(engine, validation_texts)
+        model_perplexities = validation_perplexities(engine, validation_texts)
 
-        results.append({
+        result = {
             "vocab_size": vocab_size,
             "n": n,
             "k": k,
-            "validation_accuracy": accuracy,
-        })
+            "validation_perplexity": perplexity,
+        }
+
+        for author, model_perplexity in model_perplexities.items():
+            result[f"{author}_validation_perplexity"] = model_perplexity
+
+        results.append(result)
 
     results_df = pd.DataFrame(results).sort_values(
-        "validation_accuracy",
-        ascending=False,
+        "validation_perplexity",
+        ascending=True,
     ).reset_index(drop=True)
 
     best = results_df.iloc[0]
@@ -179,4 +287,6 @@ def find_best_hyperparameters(
         "k": float(best["k"]),
     }
 
-    return best_hyperparameters, results_df
+    heatmap_figure = plot_hyperparameter_heatmaps(results_df)
+
+    return best_hyperparameters, results_df, heatmap_figure
