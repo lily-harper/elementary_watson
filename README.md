@@ -56,3 +56,11 @@ To classify direct text:
 ```bash
 python -m src.predict --text "In a hole in the ground there lived a hobbit."
 ```
+
+The predictions for `data/test/HW2-F26-testset.txt` are in
+[`outputs/HW2-F26-testset-predictions.txt`](outputs/HW2-F26-testset-predictions.txt).
+To regenerate them with the saved models, run:
+
+```bash
+python -m src.predict --lines data/test/HW2-F26-testset.txt --output outputs/HW2-F26-testset-predictions.txt
+```
